@@ -144,6 +144,10 @@ function loadJSON(key, fallbackValue) {
 function getBaseDangerZones() {
   const cached = loadJSON(ZONES_STORAGE_KEY, []);
   const cachedZones = Array.isArray(cached) ? cached : [];
+  const cachedDz41 = cachedZones.find((zone) => String(zone?.id) === "dz-41");
+  // #region agent log
+  fetch('http://127.0.0.1:7542/ingest/6d44c4f0-f4ef-4ea1-901a-f1151c7fad7a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'42ac17'},body:JSON.stringify({sessionId:'42ac17',runId:'initial',hypothesisId:'H4',location:'app.js:getBaseDangerZones',message:'Loaded cached/base zones for merge',data:{cachedCount:cachedZones.length,cachedDz41Lat:cachedDz41?.lat,cachedDz41Lng:cachedDz41?.lng},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const normalized = [...cachedZones, ...HARDCODED_DANGER_ZONES].map(normalizeZone).filter(Boolean);
   const uniqueById = Array.from(new Map(normalized.map((zone) => [zone.id, zone])).values());
   if (!uniqueById.length) {
@@ -199,6 +203,10 @@ function getDangerZones(reports = []) {
   const promotedZones = getAutoPromotedDangerZonesFromReports(reports);
   const combined = [...baseZones, ...promotedZones].map(normalizeZone).filter(Boolean);
   const uniqueById = Array.from(new Map(combined.map((zone) => [zone.id, zone])).values());
+  const resolvedDz41 = uniqueById.find((zone) => zone.id === "dz-41");
+  // #region agent log
+  fetch('http://127.0.0.1:7542/ingest/6d44c4f0-f4ef-4ea1-901a-f1151c7fad7a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'42ac17'},body:JSON.stringify({sessionId:'42ac17',runId:'initial',hypothesisId:'H4',location:'app.js:getDangerZones',message:'Resolved final danger zones',data:{finalCount:uniqueById.length,dz41Lat:resolvedDz41?.lat,dz41Lng:resolvedDz41?.lng},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   saveJSON(ZONES_STORAGE_KEY, uniqueById);
   return uniqueById;
 }
@@ -304,6 +312,9 @@ async function installApp() {
 }
 
 function showMapGuideHint() {
+  // #region agent log
+  fetch('http://127.0.0.1:7542/ingest/6d44c4f0-f4ef-4ea1-901a-f1151c7fad7a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'42ac17'},body:JSON.stringify({sessionId:'42ac17',runId:'initial',hypothesisId:'H1',location:'app.js:showMapGuideHint:start',message:'Attempting to show map guide hint',data:{hasGuideArrow:Boolean(mapGuideArrow),hasMapSection:Boolean(mapSection),mapSectionTop:mapSection?.getBoundingClientRect?.().top ?? null},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!mapGuideArrow || !mapSection) return;
 
   mapGuideArrow.classList.remove("is-hidden");
@@ -621,6 +632,9 @@ function startLocationTracking(zones) {
 }
 
 function init() {
+  // #region agent log
+  fetch('http://127.0.0.1:7542/ingest/6d44c4f0-f4ef-4ea1-901a-f1151c7fad7a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'42ac17'},body:JSON.stringify({sessionId:'42ac17',runId:'initial',hypothesisId:'H3',location:'app.js:init',message:'Initializing app with service worker context',data:{swController:Boolean(navigator.serviceWorker?.controller),swScript:navigator.serviceWorker?.controller?.scriptURL ?? null,navigationType:performance?.getEntriesByType?.('navigation')?.[0]?.type ?? null},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   map = L.map("map", { zoomControl: true }).setView(
     [DEFAULT_LOCATION.lat, DEFAULT_LOCATION.lng],
     12
@@ -647,6 +661,9 @@ function init() {
 }
 
 function openAppFromHome() {
+  // #region agent log
+  fetch('http://127.0.0.1:7542/ingest/6d44c4f0-f4ef-4ea1-901a-f1151c7fad7a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'42ac17'},body:JSON.stringify({sessionId:'42ac17',runId:'initial',hypothesisId:'H2',location:'app.js:openAppFromHome',message:'Start Safety Map clicked',data:{homeHiddenBefore:homeScreen.classList.contains('is-hidden'),appHiddenBefore:appShell.classList.contains('is-hidden')},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   homeScreen.classList.add("is-hidden");
   appShell.classList.remove("is-hidden");
   requestNotificationPermissionIfNeeded();
