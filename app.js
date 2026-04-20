@@ -46,7 +46,8 @@ const HARDCODED_DANGER_ZONES = [
   { id: "dz-37", name: "Bistupur Main Road, Jamshedpur", lat: 22.8046, lng: 86.2029 },
   { id: "dz-38", name: "Frazer Road Crossing, Patna", lat: 25.6094, lng: 85.1366 },
   { id: "dz-39", name: "Old Bus Stand Junction, Surat", lat: 21.1702, lng: 72.8311 },
-  { id: "dz-40", name: "Vani Vihar Square, Bhubaneswar", lat: 20.2961, lng: 85.8245 }
+  { id: "dz-40", name: "Vani Vihar Square, Bhubaneswar", lat: 20.2961, lng: 85.8245 },
+  { id: "dz-41", name: "Aditya College Junction, Surampalem", lat: 17.0894, lng: 82.0528 }
 ];
 
 const statusText = document.getElementById("statusText");
