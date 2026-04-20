@@ -71,6 +71,7 @@ let userLocation = { ...DEFAULT_LOCATION };
 let hasCenteredOnUser = false;
 let reportsPollTimer = null;
 let deferredInstallPrompt = null;
+let geoWatchId = null;
 const alertedZoneIds = new Set();
 let activeDangerZones = [];
 
@@ -566,6 +567,11 @@ function startLocationTracking(zones) {
     return;
   }
 
+  if (geoWatchId !== null) {
+    navigator.geolocation.clearWatch(geoWatchId);
+    geoWatchId = null;
+  }
+
   setStatus("Fetching location...");
   navigator.geolocation.getCurrentPosition(
     (position) => {
@@ -576,19 +582,26 @@ function startLocationTracking(zones) {
       console.error("Initial GPS error:", error);
       useFallbackLocation("Location permission denied. Using fallback location.");
     },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
   );
 
-  navigator.geolocation.watchPosition(
+  geoWatchId = navigator.geolocation.watchPosition(
     (position) => {
       updateUserOnMap(position);
       evaluateProximity(activeDangerZones, userLocation);
     },
     (error) => {
       console.error("GPS watch error:", error);
-      setStatus("GPS signal weak. Retrying with last known location...");
+      if (error?.code === 1) {
+        setStatus("Location permission denied. Using fallback location.");
+        useFallbackLocation("Location permission denied. Using fallback location.");
+      } else if (error?.code === 2) {
+        setStatus("GPS unavailable. Move to open sky for live tracking.");
+      } else {
+        setStatus("GPS timeout. Waiting for next live location update...");
+      }
     },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
 }
 
