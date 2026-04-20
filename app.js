@@ -60,6 +60,8 @@ const homeScreen = document.getElementById("homeScreen");
 const appShell = document.getElementById("appShell");
 const startBtn = document.getElementById("startBtn");
 const installBtn = document.getElementById("installBtn");
+const mapSection = document.getElementById("map");
+const mapGuideArrow = document.getElementById("mapGuideArrow");
 
 let map;
 let userMarker;
@@ -299,6 +301,19 @@ async function installApp() {
     hideInstallButton();
   }
   deferredInstallPrompt = null;
+}
+
+function showMapGuideHint() {
+  if (!mapGuideArrow || !mapSection) return;
+
+  mapGuideArrow.classList.remove("is-hidden");
+  mapGuideArrow.classList.add("pulse");
+  mapSection.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  setTimeout(() => {
+    mapGuideArrow.classList.remove("pulse");
+    mapGuideArrow.classList.add("is-hidden");
+  }, 4500);
 }
 
 function toRadians(value) {
@@ -637,7 +652,10 @@ function openAppFromHome() {
   requestNotificationPermissionIfNeeded();
   init();
   // Map container becomes visible only after start.
-  setTimeout(() => map.invalidateSize(), 0);
+  setTimeout(() => {
+    map.invalidateSize();
+    showMapGuideHint();
+  }, 0);
 }
 
 startBtn.addEventListener("click", openAppFromHome);

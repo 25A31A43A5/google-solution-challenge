@@ -206,6 +206,41 @@ body {
   background: #216fed;
 }
 
+.map-guide-arrow {
+  margin: 0 0 8px;
+  padding: 8px 10px 2px;
+  border-radius: 10px;
+  border: 1px solid #cddbf5;
+  background: #eef4ff;
+  color: #1b3f78;
+  text-align: center;
+}
+
+.map-guide-text {
+  margin: 0;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.map-guide-icon {
+  margin: 0;
+  font-size: 1.4rem;
+  line-height: 1.1;
+}
+
+.map-guide-arrow.pulse .map-guide-icon {
+  animation: map-arrow-bounce 0.7s ease-in-out infinite alternate;
+}
+
+@keyframes map-arrow-bounce {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(5px);
+  }
+}
+
 .map {
   width: 100%;
   height: 60vh;
