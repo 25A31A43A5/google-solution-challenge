@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Road Safety Alert Prototype</title>
+    <meta name="theme-color" content="#216fed" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <section id="homeScreen" class="home-screen">
+      <div class="home-card">
+        <p class="home-kicker">Road Safety Prototype</p>
+        <h1 class="home-title">Stay Alert in High-Risk Road Zones</h1>
+        <p class="home-desc">
+          Get real-time warnings near accident-prone areas and report near-miss incidents to
+          improve community safety.
+        </p>
+        <ul class="home-points">
+          <li>Live location-based alerts</li>
+          <li>One-tap near-miss reporting</li>
+          <li>Works even on restricted networks</li>
+        </ul>
+        <button id="startBtn" class="start-btn" type="button">Start Safety Map</button>
+        <button id="installBtn" class="start-btn is-hidden" type="button">Install Android App</button>
+      </div>
+    </section>
+
+    <main id="appShell" class="app is-hidden">
+      <header class="header">
+        <h1>Road Safety Alert</h1>
+        <p class="subtitle">Real-time alerts for accident-prone areas (SDG 11)</p>
+      </header>
+
+      <section class="status-card" aria-live="polite">
+        <div class="status-row">
+          <p id="statusText" class="status-text">Initializing map...</p>
+          <span id="statusBadge" class="status-badge">Loading</span>
+        </div>
+        <p id="locationText" class="location-text">Location: --</p>
+        <div class="stats-row">
+          <div class="stat-box">
+            <p class="stat-label">Danger Zones</p>
+            <p id="zoneCount" class="stat-value">0</p>
+          </div>
+          <div class="stat-box">
+            <p class="stat-label">Near-Miss Reports</p>
+            <p id="reportCount" class="stat-value">0</p>
+          </div>
+          <div class="stat-box">
+            <p class="stat-label">Alert Radius</p>
+            <p class="stat-value">250m</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="legend-card">
+        <p class="legend-title">Map Guide</p>
+        <div class="legend-items">
+          <span class="legend-item"><span class="dot danger"></span>High-risk zone</span>
+          <span class="legend-item"><span class="dot near-miss"></span>Near-miss report</span>
+          <span class="legend-item"><span class="dot user"></span>Your location</span>
+        </div>
+      </section>
+
+      <section id="map" class="map" aria-label="Road safety map"></section>
+
+      <section class="controls">
+        <button id="reportBtn" class="report-btn" type="button">
+          Report Near-Miss
+        </button>
+        <p class="helper-text">
+          Tap when you notice unsafe driving or a close-call near your current position.
+        </p>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="./app.js"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("./sw.js").catch(() => {});
+        });
+      }
+    </script>
+  </body>
+</html>
