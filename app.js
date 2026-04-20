@@ -47,7 +47,7 @@ const HARDCODED_DANGER_ZONES = [
   { id: "dz-38", name: "Frazer Road Crossing, Patna", lat: 25.6094, lng: 85.1366 },
   { id: "dz-39", name: "Old Bus Stand Junction, Surat", lat: 21.1702, lng: 72.8311 },
   { id: "dz-40", name: "Vani Vihar Square, Bhubaneswar", lat: 20.2961, lng: 85.8245 },
-  { id: "dz-41", name: "NH-16 Highway Junction, Surampalem", lat: 17.0958, lng: 82.0839 }
+  { id: "dz-41", name: "NH-16 Highway Junction, Surampalem", lat: 17.083095, lng: 82.073541 }
 ];
 
 const statusText = document.getElementById("statusText");
