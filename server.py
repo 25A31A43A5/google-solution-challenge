@@ -129,6 +129,21 @@ def generate_ai_safety_advice(payload):
         ensure_ascii=True,
     ).encode("utf-8")
 
+    def list_models_preview(limit=12):
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_API_KEY}"
+        request = Request(url, headers={"Content-Type": "application/json"}, method="GET")
+        with urlopen(request, timeout=12) as response:
+            parsed = json.loads(response.read().decode("utf-8"))
+        models = parsed.get("models") or []
+        names = []
+        for model in models:
+            name = str(model.get("name") or "")
+            if name.startswith("models/"):
+                name = name[len("models/") :]
+            if name:
+                names.append(name)
+        return names[:limit]
+
     def call_gemini(model_name):
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -138,23 +153,34 @@ def generate_ai_safety_advice(payload):
         with urlopen(request, timeout=12) as response:
             return json.loads(response.read().decode("utf-8"))
 
-    try:
-        parsed = call_gemini(GEMINI_MODEL)
-    except HTTPError as exc:
-        # Model IDs/aliases can change; retry a couple of known-good aliases on 404.
-        if int(getattr(exc, "code", 0)) == 404:
-            for fallback_model in ("gemini-flash-latest", "gemini-2.5-flash"):
-                if fallback_model == GEMINI_MODEL:
-                    continue
-                try:
-                    parsed = call_gemini(fallback_model)
-                    break
-                except HTTPError:
-                    continue
-            else:
-                raise
-        else:
-            raise
+    models_to_try = []
+    if GEMINI_MODEL:
+        models_to_try.append(GEMINI_MODEL)
+    # Known-good fallbacks if env model is deprecated/unavailable.
+    models_to_try.extend(
+        [
+            "gemini-2.5-flash",
+            "gemini-flash-latest",
+            "gemini-2.0-flash-lite-001",
+            "gemini-2.0-flash-001",
+        ]
+    )
+    # De-dupe while preserving order.
+    models_to_try = list(dict.fromkeys(models_to_try))
+
+    last_http_error = None
+    parsed = None
+    for model_name in models_to_try:
+        try:
+            parsed = call_gemini(model_name)
+            break
+        except HTTPError as exc:
+            last_http_error = exc
+            continue
+    if parsed is None and last_http_error is not None:
+        raise last_http_error
+    if parsed is None:
+        raise ValueError("Gemini request failed without HTTPError")
     candidates = parsed.get("candidates") or []
     if not candidates:
         raise ValueError("No candidates returned by Gemini")
@@ -210,9 +236,15 @@ class AppHandler(SimpleHTTPRequestHandler):
                     )
                 }
                 if DEBUG_AI:
+                    models_preview = None
+                    try:
+                        models_preview = list_models_preview()
+                    except Exception:
+                        models_preview = None
                     response["debug"] = {
                         "gemini_key_configured": bool(GEMINI_API_KEY),
                         "gemini_model": GEMINI_MODEL,
+                        "models_preview": models_preview,
                         "error": f"{type(exc).__name__}: {exc}",
                     }
                 self._send_json(response, 200)
