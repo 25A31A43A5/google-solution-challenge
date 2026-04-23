@@ -10,8 +10,9 @@ REPORTS_FILE = "reports.shared.json"
 RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "").strip()
 RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 RECAPTCHA_MIN_SCORE = 0.3
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyBKGirRQrk1PCu1Ik3sJPVTrQg3Wr8TOwk").strip()
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
+DEBUG_AI = os.environ.get("DEBUG_AI", "").strip().lower() in {"1", "true", "yes", "on"}
 REPORT_COOLDOWN_SECONDS = 8
 DUPLICATE_SPOT_WINDOW_SECONDS = 120
 SPOT_BUCKET_DECIMALS = 4
@@ -181,16 +182,20 @@ class AppHandler(SimpleHTTPRequestHandler):
                 raw = self.rfile.read(length) if length else b"{}"
                 payload = json.loads(raw.decode("utf-8"))
                 advice = generate_ai_safety_advice(payload)
-            except Exception:
-                self._send_json(
-                    {
-                        "advice": (
-                            "AI insight is temporarily unavailable. Drive cautiously, "
-                            "watch for blind spots, and reduce speed in dense traffic."
-                        )
-                    },
-                    200,
-                )
+            except Exception as exc:
+                response = {
+                    "advice": (
+                        "AI insight is temporarily unavailable. Drive cautiously, "
+                        "watch for blind spots, and reduce speed in dense traffic."
+                    )
+                }
+                if DEBUG_AI:
+                    response["debug"] = {
+                        "gemini_key_configured": bool(GEMINI_API_KEY),
+                        "gemini_model": GEMINI_MODEL,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                self._send_json(response, 200)
                 return
             self._send_json({"advice": advice}, 200)
             return
