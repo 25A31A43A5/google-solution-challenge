@@ -1,3 +1,4 @@
 .cursor/
 debug-*.log
 reports.shared.json
+__pycache__/
