@@ -5,3 +5,10 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python server.py
+    envVars:
+      - key: RECAPTCHA_SECRET_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-1.5-flash
