@@ -92,14 +92,22 @@ function initializeAnalytics() {
     function gtag() {
       window.dataLayer.push(arguments);
     };
-  window.gtag("js", new Date());
-  window.gtag("config", GA4_MEASUREMENT_ID, { anonymize_ip: true });
+
+  if (!window.__ga4Configured) {
+    window.gtag("js", new Date());
+    window.gtag("config", GA4_MEASUREMENT_ID, { anonymize_ip: true });
+    window.__ga4Configured = true;
+  }
+
+  const gtagSrc = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(
+    GA4_MEASUREMENT_ID
+  )}`;
+  const existingScript = document.querySelector(`script[src="${gtagSrc}"]`);
+  if (existingScript) return;
 
   const gtagScript = document.createElement("script");
   gtagScript.async = true;
-  gtagScript.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(
-    GA4_MEASUREMENT_ID
-  )}`;
+  gtagScript.src = gtagSrc;
   gtagScript.onerror = () => {
     // Keep app behavior unchanged if analytics script fails to load.
   };
