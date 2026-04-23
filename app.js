@@ -330,9 +330,23 @@ async function postNearMissReportToServer(report) {
         recaptchaToken
       })
     });
-    return response.ok;
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      payload = null;
+    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      reason: payload?.reason || ""
+    };
   } catch (error) {
-    return false;
+    return {
+      ok: false,
+      status: 0,
+      reason: "network_error"
+    };
   }
 }
 
@@ -652,17 +666,24 @@ async function addNearMissReport() {
     lng,
     timestamp: Date.now()
   };
-  reports.push(report);
-  saveNearMissReports(reports);
-  refreshMapData(reports);
-  const isShared = await postNearMissReportToServer(report);
-  if (isShared) {
+  reportBtn.disabled = true;
+  setStatus("Submitting near-miss report...");
+  const submitResult = await postNearMissReportToServer(report);
+  reportBtn.disabled = false;
+
+  if (submitResult.ok) {
+    reports.push(report);
+    saveNearMissReports(reports);
+    refreshMapData(reports);
     await syncNearMissReports(activeDangerZones);
     trackEvent("near_miss_reported", { mode: "shared" });
     setStatus("Near-miss reported and shared.");
+  } else if (submitResult.status === 429) {
+    setStatus("Too many reports from this area. Please wait and try again.");
+  } else if (submitResult.status === 403) {
+    setStatus("Report blocked by verification. Please retry.");
   } else {
-    trackEvent("near_miss_reported", { mode: "local_only" });
-    setStatus("Near-miss saved locally (sharing server unavailable).");
+    setStatus("Could not share report right now. Check network and retry.");
   }
 }
 
