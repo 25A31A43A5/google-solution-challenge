@@ -5,6 +5,7 @@ const PROMOTION_BUCKET_DECIMALS = 3;
 const ZONES_STORAGE_KEY = "roadSafetyZonesCacheV1";
 const REPORTS_STORAGE_KEY = "nearMissReportsV1";
 const REPORTS_API_ENDPOINT = "/api/reports";
+const AI_ADVICE_API_ENDPOINT = "/api/ai-advice";
 const GA4_MEASUREMENT_ID =
   document.querySelector('meta[name="ga4-measurement-id"]')?.content?.trim() || "";
 const RECAPTCHA_SITE_KEY =
@@ -67,6 +68,8 @@ const installBtn = document.getElementById("installBtn");
 const mapSection = document.getElementById("map");
 const mapGuideArrow = document.getElementById("mapGuideArrow");
 const zoneAlertToast = document.getElementById("zoneAlertToast");
+const aiAdviceBtn = document.getElementById("aiAdviceBtn");
+const aiAdviceText = document.getElementById("aiAdviceText");
 
 let map;
 let userMarker;
@@ -364,6 +367,63 @@ async function syncNearMissReports(zones) {
   saveNearMissReports(sharedReports);
   refreshMapData(sharedReports);
   return true;
+}
+
+async function fetchAiSafetyAdvice(context) {
+  try {
+    const response = await fetch(AI_ADVICE_API_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(context)
+    });
+    if (!response.ok) return null;
+    const payload = await response.json();
+    return typeof payload?.advice === "string" ? payload.advice.trim() : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function generateAiSafetyTip() {
+  if (!aiAdviceBtn || !aiAdviceText) return;
+  const lat = Number(userLocation?.lat);
+  const lng = Number(userLocation?.lng);
+  if (!isValidCoordinate(lat, lng)) {
+    aiAdviceText.textContent = "AI tip unavailable until a valid location is detected.";
+    return;
+  }
+
+  const reports = getNearMissReportsFromStorage();
+  const nearbyZoneCount = activeDangerZones.filter(
+    (zone) => distanceMeters(lat, lng, zone.lat, zone.lng) <= 1000
+  ).length;
+  const nearbyReportCount = reports.filter(
+    (report) => distanceMeters(lat, lng, report.lat, report.lng) <= 1000
+  ).length;
+
+  aiAdviceBtn.disabled = true;
+  aiAdviceText.textContent = "Generating AI safety tip...";
+  const advice = await fetchAiSafetyAdvice({
+    lat,
+    lng,
+    nearbyZoneCount,
+    nearbyReportCount,
+    totalZoneCount: activeDangerZones.length,
+    totalReportCount: reports.length
+  });
+  aiAdviceBtn.disabled = false;
+
+  if (!advice) {
+    aiAdviceText.textContent =
+      "AI service is unavailable right now. Drive defensively: slow down near intersections and keep extra distance.";
+    return;
+  }
+
+  aiAdviceText.textContent = advice;
+  trackEvent("ai_safety_tip_generated", {
+    nearby_zones: nearbyZoneCount,
+    nearby_reports: nearbyReportCount
+  });
 }
 
 function setCounts(zonesCount, reportsCount) {
@@ -776,6 +836,9 @@ function init() {
   refreshMapData(nearMissReports);
 
   reportBtn.addEventListener("click", addNearMissReport);
+  if (aiAdviceBtn) {
+    aiAdviceBtn.addEventListener("click", generateAiSafetyTip);
+  }
   startLocationTracking(activeDangerZones);
 
   syncNearMissReports(activeDangerZones);

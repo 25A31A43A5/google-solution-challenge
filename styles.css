@@ -268,6 +268,29 @@ body {
   margin-top: 12px;
 }
 
+.ai-card {
+  margin-top: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.ai-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #24467a;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ai-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .report-btn {
   width: 100%;
   border: none;

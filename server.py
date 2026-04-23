@@ -10,6 +10,8 @@ REPORTS_FILE = "reports.shared.json"
 RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "").strip()
 RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 RECAPTCHA_MIN_SCORE = 0.3
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyBKGirRQrk1PCu1Ik3sJPVTrQg3Wr8TOwk").strip()
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
 REPORT_COOLDOWN_SECONDS = 8
 DUPLICATE_SPOT_WINDOW_SECONDS = 120
 SPOT_BUCKET_DECIMALS = 4
@@ -94,6 +96,54 @@ def is_spam_report(reports, source, lat, lng, now_ms):
     return False, ""
 
 
+def generate_ai_safety_advice(payload):
+    lat = float(payload.get("lat"))
+    lng = float(payload.get("lng"))
+    nearby_zone_count = int(payload.get("nearbyZoneCount") or 0)
+    nearby_report_count = int(payload.get("nearbyReportCount") or 0)
+    total_zone_count = int(payload.get("totalZoneCount") or 0)
+    total_report_count = int(payload.get("totalReportCount") or 0)
+
+    if not GEMINI_API_KEY:
+        return (
+            "Gemini API key is not configured. Safety tip: reduce speed near intersections, "
+            "avoid sudden lane changes, and keep a 3-second following gap."
+        )
+
+    prompt = (
+        "You are an assistant for a road safety app. Provide exactly 2 short actionable bullet points "
+        "for safer driving now. Keep it under 50 words total. Context: "
+        f"user_location=({lat:.5f},{lng:.5f}), nearby_zones_1km={nearby_zone_count}, "
+        f"nearby_reports_1km={nearby_report_count}, total_zones={total_zone_count}, "
+        f"total_reports={total_report_count}."
+    )
+
+    body = json.dumps(
+        {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 120},
+        },
+        ensure_ascii=True,
+    ).encode("utf-8")
+
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    )
+    request = Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+
+    with urlopen(request, timeout=8) as response:
+        parsed = json.loads(response.read().decode("utf-8"))
+    candidates = parsed.get("candidates") or []
+    if not candidates:
+        raise ValueError("No candidates returned by Gemini")
+    parts = ((candidates[0].get("content") or {}).get("parts")) or []
+    text = "\n".join(str(part.get("text") or "").strip() for part in parts).strip()
+    if not text:
+        raise ValueError("Empty Gemini response")
+    return text
+
+
 class AppHandler(SimpleHTTPRequestHandler):
     def _send_json(self, payload, status=200):
         body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
@@ -108,7 +158,7 @@ class AppHandler(SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_OPTIONS(self):
-        if urlparse(self.path).path == "/api/reports":
+        if urlparse(self.path).path in {"/api/reports", "/api/ai-advice"}:
             self.send_response(204)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -124,7 +174,28 @@ class AppHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def do_POST(self):
-        if urlparse(self.path).path != "/api/reports":
+        path = urlparse(self.path).path
+        if path == "/api/ai-advice":
+            length = int(self.headers.get("Content-Length", "0"))
+            try:
+                raw = self.rfile.read(length) if length else b"{}"
+                payload = json.loads(raw.decode("utf-8"))
+                advice = generate_ai_safety_advice(payload)
+            except Exception:
+                self._send_json(
+                    {
+                        "advice": (
+                            "AI insight is temporarily unavailable. Drive cautiously, "
+                            "watch for blind spots, and reduce speed in dense traffic."
+                        )
+                    },
+                    200,
+                )
+                return
+            self._send_json({"advice": advice}, 200)
+            return
+
+        if path != "/api/reports":
             self._send_json({"error": "Not Found"}, 404)
             return
 
