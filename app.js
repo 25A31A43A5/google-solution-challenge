@@ -7,6 +7,8 @@ const REPORTS_STORAGE_KEY = "nearMissReportsV1";
 const REPORTS_API_ENDPOINT = "/api/reports";
 const GA4_MEASUREMENT_ID =
   document.querySelector('meta[name="ga4-measurement-id"]')?.content?.trim() || "";
+const RECAPTCHA_SITE_KEY =
+  document.querySelector('meta[name="recaptcha-site-key"]')?.content?.trim() || "";
 
 const HARDCODED_DANGER_ZONES = [
   { id: "dz-1", name: "Rajiv Chowk Junction", lat: 28.6328, lng: 77.2197 },
@@ -80,6 +82,7 @@ let geoWatchId = null;
 let alertHideTimer = null;
 const zonesInProximity = new Set();
 let activeDangerZones = [];
+let recaptchaReady = false;
 
 function initializeAnalytics() {
   if (!GA4_MEASUREMENT_ID) return;
@@ -106,6 +109,33 @@ function initializeAnalytics() {
 function trackEvent(eventName, params = {}) {
   if (!GA4_MEASUREMENT_ID || typeof window.gtag !== "function") return;
   window.gtag("event", eventName, params);
+}
+
+function initializeRecaptcha() {
+  if (!RECAPTCHA_SITE_KEY) return;
+  const recaptchaScript = document.createElement("script");
+  recaptchaScript.async = true;
+  recaptchaScript.src = `https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(
+    RECAPTCHA_SITE_KEY
+  )}`;
+  recaptchaScript.onload = () => {
+    recaptchaReady = true;
+  };
+  recaptchaScript.onerror = () => {
+    recaptchaReady = false;
+  };
+  document.head.appendChild(recaptchaScript);
+}
+
+async function getRecaptchaToken(action = "report_near_miss") {
+  if (!RECAPTCHA_SITE_KEY || !recaptchaReady || !window.grecaptcha) return "";
+  try {
+    await new Promise((resolve) => window.grecaptcha.ready(resolve));
+    const token = await window.grecaptcha.execute(RECAPTCHA_SITE_KEY, { action });
+    return String(token || "");
+  } catch (error) {
+    return "";
+  }
 }
 
 function isValidCoordinate(lat, lng) {
@@ -290,11 +320,15 @@ async function fetchNearMissReportsFromServer() {
 }
 
 async function postNearMissReportToServer(report) {
+  const recaptchaToken = await getRecaptchaToken();
   try {
     const response = await fetch(REPORTS_API_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(report)
+      body: JSON.stringify({
+        ...report,
+        recaptchaToken
+      })
     });
     return response.ok;
   } catch (error) {
@@ -692,6 +726,7 @@ function startLocationTracking(zones) {
 
 function init() {
   initializeAnalytics();
+  initializeRecaptcha();
   trackEvent("app_session_started", {
     has_service_worker: Boolean(navigator.serviceWorker?.controller)
   });
