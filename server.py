@@ -3,6 +3,7 @@ import os
 import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlencode, urlparse
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 
@@ -11,7 +12,8 @@ RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "").strip()
 RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 RECAPTCHA_MIN_SCORE = 0.3
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash").strip()
+# Default to a currently supported model; older model IDs can return 404.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash").strip()
 DEBUG_AI = os.environ.get("DEBUG_AI", "").strip().lower() in {"1", "true", "yes", "on"}
 REPORT_COOLDOWN_SECONDS = 8
 DUPLICATE_SPOT_WINDOW_SECONDS = 120
@@ -127,14 +129,32 @@ def generate_ai_safety_advice(payload):
         ensure_ascii=True,
     ).encode("utf-8")
 
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-    )
-    request = Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+    def call_gemini(model_name):
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{model_name}:generateContent?key={GEMINI_API_KEY}"
+        )
+        request = Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
+        with urlopen(request, timeout=12) as response:
+            return json.loads(response.read().decode("utf-8"))
 
-    with urlopen(request, timeout=8) as response:
-        parsed = json.loads(response.read().decode("utf-8"))
+    try:
+        parsed = call_gemini(GEMINI_MODEL)
+    except HTTPError as exc:
+        # Model IDs/aliases can change; retry a couple of known-good aliases on 404.
+        if int(getattr(exc, "code", 0)) == 404:
+            for fallback_model in ("gemini-flash-latest", "gemini-2.5-flash"):
+                if fallback_model == GEMINI_MODEL:
+                    continue
+                try:
+                    parsed = call_gemini(fallback_model)
+                    break
+                except HTTPError:
+                    continue
+            else:
+                raise
+        else:
+            raise
     candidates = parsed.get("candidates") or []
     if not candidates:
         raise ValueError("No candidates returned by Gemini")
