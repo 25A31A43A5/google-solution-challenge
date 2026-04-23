@@ -12,3 +12,5 @@ services:
         sync: false
       - key: GEMINI_MODEL
         value: gemini-1.5-flash
+      - key: DEBUG_AI
+        value: "1"
