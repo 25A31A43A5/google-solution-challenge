@@ -100,8 +100,16 @@
     <script src="./app.js"></script>
     <script>
       if ("serviceWorker" in navigator) {
+        let hasRefreshedAfterSwUpdate = false;
         window.addEventListener("load", () => {
-          navigator.serviceWorker.register("./sw.js").catch(() => {});
+          navigator.serviceWorker.register("./sw.js").then((registration) => {
+            registration.update().catch(() => {});
+            navigator.serviceWorker.addEventListener("controllerchange", () => {
+              if (hasRefreshedAfterSwUpdate) return;
+              hasRefreshedAfterSwUpdate = true;
+              window.location.reload();
+            });
+          }).catch(() => {});
         });
       }
     </script>
