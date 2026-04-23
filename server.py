@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
@@ -9,6 +10,9 @@ REPORTS_FILE = "reports.shared.json"
 RECAPTCHA_SECRET_KEY = os.environ.get("RECAPTCHA_SECRET_KEY", "").strip()
 RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 RECAPTCHA_MIN_SCORE = 0.3
+REPORT_COOLDOWN_SECONDS = 8
+DUPLICATE_SPOT_WINDOW_SECONDS = 120
+SPOT_BUCKET_DECIMALS = 4
 
 
 def load_reports():
@@ -58,6 +62,38 @@ def verify_recaptcha(token, remote_ip):
     return True, "recaptcha_verified"
 
 
+def is_spam_report(reports, source, lat, lng, now_ms):
+    cooldown_ms = REPORT_COOLDOWN_SECONDS * 1000
+    duplicate_window_ms = DUPLICATE_SPOT_WINDOW_SECONDS * 1000
+    bucket_lat = round(lat, SPOT_BUCKET_DECIMALS)
+    bucket_lng = round(lng, SPOT_BUCKET_DECIMALS)
+
+    for report in reversed(reports):
+        try:
+            report_ts = int(report.get("timestamp", 0))
+            report_lat = float(report.get("lat"))
+            report_lng = float(report.get("lng"))
+        except Exception:
+            continue
+
+        age_ms = now_ms - report_ts
+        if age_ms < 0:
+            continue
+
+        report_source = str(report.get("source") or "")
+        if source and report_source == source and age_ms < cooldown_ms:
+            return True, "report_cooldown_active"
+
+        if (
+            age_ms < duplicate_window_ms
+            and round(report_lat, SPOT_BUCKET_DECIMALS) == bucket_lat
+            and round(report_lng, SPOT_BUCKET_DECIMALS) == bucket_lng
+        ):
+            return True, "duplicate_spot_recently_reported"
+
+    return False, ""
+
+
 class AppHandler(SimpleHTTPRequestHandler):
     def _send_json(self, payload, status=200):
         body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
@@ -104,7 +140,6 @@ class AppHandler(SimpleHTTPRequestHandler):
             lat = float(payload.get("lat"))
             lng = float(payload.get("lng"))
             report_id = str(payload.get("id") or f"report-{int(__import__('time').time() * 1000)}")
-            timestamp = int(payload.get("timestamp") or int(__import__("time").time() * 1000))
             recaptcha_token = str(payload.get("recaptchaToken") or "")
         except Exception:
             self._send_json({"error": "Invalid report payload"}, 400)
@@ -121,7 +156,22 @@ class AppHandler(SimpleHTTPRequestHandler):
             return
 
         reports = load_reports()
-        reports.append({"id": report_id, "lat": lat, "lng": lng, "timestamp": timestamp})
+        server_timestamp = int(time.time() * 1000)
+        is_spam, spam_reason = is_spam_report(reports, remote_ip, lat, lng, server_timestamp)
+        if is_spam:
+            self._send_json({"error": "Report blocked", "reason": spam_reason}, 429)
+            return
+
+        # Use server time and source for anti-spam checks and consistency.
+        reports.append(
+            {
+                "id": report_id,
+                "lat": lat,
+                "lng": lng,
+                "timestamp": server_timestamp,
+                "source": remote_ip,
+            }
+        )
         save_reports(reports)
         self._send_json({"ok": True, "count": len(reports)}, 201)
 
