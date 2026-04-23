@@ -89,6 +89,20 @@ body {
   padding: 12px;
 }
 
+.zone-alert-toast {
+  position: sticky;
+  top: 8px;
+  z-index: 1500;
+  margin-bottom: 10px;
+  border: 1px solid #ffb8c2;
+  background: #fff1f3;
+  color: #8f1022;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-weight: 700;
+  box-shadow: 0 8px 20px rgba(130, 15, 34, 0.2);
+}
+
 .header h1 {
   margin: 0;
   font-size: 1.4rem;

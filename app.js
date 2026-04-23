@@ -5,6 +5,8 @@ const PROMOTION_BUCKET_DECIMALS = 3;
 const ZONES_STORAGE_KEY = "roadSafetyZonesCacheV1";
 const REPORTS_STORAGE_KEY = "nearMissReportsV1";
 const REPORTS_API_ENDPOINT = "/api/reports";
+const GA4_MEASUREMENT_ID =
+  document.querySelector('meta[name="ga4-measurement-id"]')?.content?.trim() || "";
 
 const HARDCODED_DANGER_ZONES = [
   { id: "dz-1", name: "Rajiv Chowk Junction", lat: 28.6328, lng: 77.2197 },
@@ -62,6 +64,7 @@ const startBtn = document.getElementById("startBtn");
 const installBtn = document.getElementById("installBtn");
 const mapSection = document.getElementById("map");
 const mapGuideArrow = document.getElementById("mapGuideArrow");
+const zoneAlertToast = document.getElementById("zoneAlertToast");
 
 let map;
 let userMarker;
@@ -74,8 +77,36 @@ let hasCenteredOnUser = false;
 let reportsPollTimer = null;
 let deferredInstallPrompt = null;
 let geoWatchId = null;
-const alertedZoneIds = new Set();
+let alertHideTimer = null;
+const zonesInProximity = new Set();
 let activeDangerZones = [];
+
+function initializeAnalytics() {
+  if (!GA4_MEASUREMENT_ID) return;
+  window.dataLayer = window.dataLayer || [];
+  window.gtag =
+    window.gtag ||
+    function gtag() {
+      window.dataLayer.push(arguments);
+    };
+  window.gtag("js", new Date());
+  window.gtag("config", GA4_MEASUREMENT_ID, { anonymize_ip: true });
+
+  const gtagScript = document.createElement("script");
+  gtagScript.async = true;
+  gtagScript.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(
+    GA4_MEASUREMENT_ID
+  )}`;
+  gtagScript.onerror = () => {
+    // Keep app behavior unchanged if analytics script fails to load.
+  };
+  document.head.appendChild(gtagScript);
+}
+
+function trackEvent(eventName, params = {}) {
+  if (!GA4_MEASUREMENT_ID || typeof window.gtag !== "function") return;
+  window.gtag("event", eventName, params);
+}
 
 function isValidCoordinate(lat, lng) {
   return (
@@ -385,6 +416,7 @@ function setupReliableTileLayer() {
 
     if (index >= providers.length) {
       tileLayer = createOfflineGridLayer().addTo(map);
+      trackEvent("map_provider_changed", { provider: "offline_grid" });
       setStatus("All online map APIs blocked. Using offline demo map.");
       return;
     }
@@ -394,12 +426,16 @@ function setupReliableTileLayer() {
     tileLayer = providers[providerIndex].addTo(map);
 
     if (providerIndex === 0) {
+      trackEvent("map_provider_changed", { provider: "google_tiles" });
       setStatus("Using Google-based map tiles.");
     } else if (providerIndex === 1) {
+      trackEvent("map_provider_changed", { provider: "arcgis" });
       setStatus("Google blocked. Switched to ArcGIS.");
     } else if (providerIndex === 2) {
+      trackEvent("map_provider_changed", { provider: "openstreetmap" });
       setStatus("Primary APIs blocked. Switched to OpenStreetMap.");
     } else {
+      trackEvent("map_provider_changed", { provider: "carto" });
       setStatus("Primary APIs blocked. Switched to CARTO tiles.");
     }
 
@@ -479,25 +515,46 @@ function renderNearMissReports(reports) {
 }
 
 function showOneTimeZoneAlert(zone) {
-  if (alertedZoneIds.has(zone.id)) return;
+  if (zoneAlertToast) {
+    zoneAlertToast.textContent = `Warning: Entering high-risk area (${zone.name})`;
+    zoneAlertToast.classList.remove("is-hidden");
+    if (alertHideTimer) {
+      clearTimeout(alertHideTimer);
+    }
+    alertHideTimer = setTimeout(() => {
+      zoneAlertToast.classList.add("is-hidden");
+    }, 4500);
+  }
 
-  alertedZoneIds.add(zone.id);
+  trackEvent("danger_zone_alert", {
+    zone_id: zone.id,
+    zone_name: zone.name
+  });
   setStatus(`Warning: High-risk area ahead (${zone.name}).`);
+
+  if ("vibrate" in navigator) {
+    navigator.vibrate([220, 120, 220]);
+  }
   if ("Notification" in window && Notification.permission === "granted") {
     new Notification("Road Safety Alert", { body: `You are entering a high-risk area: ${zone.name}` });
     return;
   }
-  window.alert(`Warning: You are entering a high-risk area.\nZone: ${zone.name}`);
 }
 
 function evaluateProximity(zones, current) {
   if (!isValidCoordinate(current.lat, current.lng)) return;
+  const currentZones = new Set();
   zones.forEach((zone) => {
     const meters = distanceMeters(current.lat, current.lng, zone.lat, zone.lng);
     if (meters <= ALERT_DISTANCE_METERS) {
-      showOneTimeZoneAlert(zone);
+      currentZones.add(zone.id);
+      if (!zonesInProximity.has(zone.id)) {
+        showOneTimeZoneAlert(zone);
+      }
     }
   });
+  zonesInProximity.clear();
+  currentZones.forEach((zoneId) => zonesInProximity.add(zoneId));
 }
 
 function refreshMapData(reports) {
@@ -567,8 +624,10 @@ async function addNearMissReport() {
   const isShared = await postNearMissReportToServer(report);
   if (isShared) {
     await syncNearMissReports(activeDangerZones);
+    trackEvent("near_miss_reported", { mode: "shared" });
     setStatus("Near-miss reported and shared.");
   } else {
+    trackEvent("near_miss_reported", { mode: "local_only" });
     setStatus("Near-miss saved locally (sharing server unavailable).");
   }
 }
@@ -632,6 +691,10 @@ function startLocationTracking(zones) {
 }
 
 function init() {
+  initializeAnalytics();
+  trackEvent("app_session_started", {
+    has_service_worker: Boolean(navigator.serviceWorker?.controller)
+  });
   // #region agent log
   fetch('http://127.0.0.1:7542/ingest/6d44c4f0-f4ef-4ea1-901a-f1151c7fad7a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'42ac17'},body:JSON.stringify({sessionId:'42ac17',runId:'initial',hypothesisId:'H3',location:'app.js:init',message:'Initializing app with service worker context',data:{swController:Boolean(navigator.serviceWorker?.controller),swScript:navigator.serviceWorker?.controller?.scriptURL ?? null,navigationType:performance?.getEntriesByType?.('navigation')?.[0]?.type ?? null},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
@@ -661,6 +724,7 @@ function init() {
 }
 
 function openAppFromHome() {
+  trackEvent("home_start_clicked");
   // #region agent log
   fetch('http://127.0.0.1:7542/ingest/6d44c4f0-f4ef-4ea1-901a-f1151c7fad7a',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'42ac17'},body:JSON.stringify({sessionId:'42ac17',runId:'initial',hypothesisId:'H2',location:'app.js:openAppFromHome',message:'Start Safety Map clicked',data:{homeHiddenBefore:homeScreen.classList.contains('is-hidden'),appHiddenBefore:appShell.classList.contains('is-hidden')},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
